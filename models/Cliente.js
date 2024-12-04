@@ -26,6 +26,16 @@ const ClientesSchema = mongoose.Schema({
         type: String,
         trim: true
     }, 
+    avatar: {
+        type: String,
+        trim: true,
+        default: null
+    },
+    estado: {
+        type: String,
+        enum: ['ACTIVO', 'INACTIVO'],
+        default: 'ACTIVO'
+    },
     creado: {
         type: Date,
         default: Date.now()
