@@ -26,6 +26,8 @@ const typeDefs = gql`
         empresa: String
         email: String
         telefono: String
+        avatar: String
+        estado: String
         vendedor: ID
     }
 
