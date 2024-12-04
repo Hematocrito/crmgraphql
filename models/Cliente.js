@@ -28,8 +28,7 @@ const ClientesSchema = mongoose.Schema({
     }, 
     avatar: {
         type: String,
-        trim: true,
-        default: null
+        trim: true
     },
     estado: {
         type: String,
