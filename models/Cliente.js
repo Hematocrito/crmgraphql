@@ -32,8 +32,7 @@ const ClientesSchema = mongoose.Schema({
     },
     estado: {
         type: String,
-        enum: ['ACTIVO', 'INACTIVO'],
-        default: 'ACTIVO'
+        enum: ['activo', 'inactivo']
     },
     creado: {
         type: Date,
