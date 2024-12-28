@@ -13,7 +13,6 @@ const ClientesSchema = mongoose.Schema({
     },
     empresa: {
         type: String,
-        required: true,
         trim: true
     },
     email: {
@@ -30,9 +29,13 @@ const ClientesSchema = mongoose.Schema({
         type: String,
         trim: true
     },
+    dni: {
+        type: String,
+        trim: true
+    },
     estado: {
         type: String,
-        enum: ['activo', 'inactivo']
+        enum: ['activo', 'inactivo', 'cerrado', 'pendiente']
     },
     creado: {
         type: Date,

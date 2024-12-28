@@ -240,7 +240,7 @@ const resolvers = {
             return "Producto eliminado";
         },
         nuevoCliente: async (_, {input}, ctx) => {
-            console.log(ctx)
+            console.log('INPUT ', input);
             //Verificar si el cliente ya está registrado
             const {email} = input;
             console.log(input);
