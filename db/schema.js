@@ -79,6 +79,7 @@ const typeDefs = gql`
         empresa: String
         email: String!
         telefono: String
+        avatar: String
         dni: String
         estado: String
     }
