@@ -28,6 +28,7 @@ const typeDefs = gql`
         telefono: String
         avatar: String
         estado: String
+        notas: String
         vendedor: ID
     }
 
@@ -82,6 +83,7 @@ const typeDefs = gql`
         avatar: String
         dni: String
         estado: String
+        notas: String
     }
 
     input PedidoProductoInput{

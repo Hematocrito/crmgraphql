@@ -37,6 +37,10 @@ const ClientesSchema = mongoose.Schema({
         type: String,
         enum: ['activo', 'inactivo', 'cerrado', 'pendiente']
     },
+    notas: {
+        type: String,
+        trim: true
+    },
     creado: {
         type: Date,
         default: Date.now()
