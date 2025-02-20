@@ -17,9 +17,7 @@ const ClientesSchema = mongoose.Schema({
     },
     email: {
         type: String,
-        required: true,
-        trim: true,
-        unique: true
+        trim: true
     }, 
     telefono: {
         type: String,
@@ -31,7 +29,9 @@ const ClientesSchema = mongoose.Schema({
     },
     dni: {
         type: String,
-        trim: true
+        trim: true,
+        unique: true,
+        sparse: true  // permite que el campo sea opcional pero único cuando existe
     },
     estado: {
         type: String,
