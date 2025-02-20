@@ -22,10 +22,16 @@ const UsuarioSchema = mongoose.Schema({
         required: true,
         trim: true
     },
+    rol: {
+        type: String,
+        default: 'ABOGADO',
+        enum: ['ABOGADO', 'ADMIN']
+    },
     creado: {
         type: Date,
         default: Date.now()
     }
+
 });
 
 module.exports = mongoose.model('Usuario', UsuarioSchema);
