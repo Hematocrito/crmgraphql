@@ -2,19 +2,7 @@ const Usuario = require('../models/Usuario');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Cliente = require('../models/Cliente');
-const nodemailer = require('nodemailer');
 require('dotenv').config({ path: 'variables.env' });
-
-// Configurar el transporter de nodemailer
-const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.EMAIL_USER, // tu email
-        pass: process.env.EMAIL_PASS  // tu contraseña de aplicación de Gmail
-    }
-});
 
 const crearToken = (usuario, secreta, expiresIn) => {
     const { id, email, nombre, apellido, rol } = usuario;
@@ -138,40 +126,9 @@ const resolvers = {
         },
         resetPassword: async (_, {input}) => {
             const {email} = input;
-            
-            // Verificar si el usuario existe
             const usuario = await Usuario.findOne({email});
             if(!usuario){
                 throw new Error('El usuario no existe');
-            }
-
-            try {
-                // Generar token temporal
-                const resetToken = jwt.sign(
-                    { id: usuario.id, email: usuario.email },
-                    process.env.SECRETA,
-                    { expiresIn: '1h' }
-                );
-
-                // Enviar email
-                await transporter.sendMail({
-                    from: process.env.EMAIL_FROM,
-                    to: email,
-                    subject: "Restablecer Contraseña - Estudio Murga",
-                    html: `
-                        <h1>Restablecer tu contraseña</h1>
-                        <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace:</p>
-                        <a href="${process.env.FRONTEND_URL}/nuevo-password/${resetToken}">Restablecer Contraseña</a>
-                        <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
-                        <p>El enlace expirará en 1 hora.</p>
-                    `
-                });
-
-                return "Se ha enviado un email con las instrucciones";
-                
-            } catch (error) {
-                console.log(error);
-                throw new Error('Error al enviar el email');
             }
         },  
         nuevoCliente: async (_, {input}, ctx) => {

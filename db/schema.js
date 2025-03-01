@@ -65,7 +65,11 @@ const typeDefs = gql`
         password: String!
     }
 
-     type ClientesxUsuario {
+    input EmailInput {
+        email: String!
+    }
+
+    type ClientesxUsuario {
         id: ID
         nombre: String
         apellido: String
@@ -100,6 +104,7 @@ const typeDefs = gql`
         # Usuarios
         nuevoUsuario(input: UsuarioInput): Usuario
         autenticarUsuario(input: AutenticarInput): Token
+        resetPassword(input: EmailInput): String
 
         # Clientes
         nuevoCliente(input: ClienteInput): Cliente
