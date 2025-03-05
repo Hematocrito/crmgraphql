@@ -68,6 +68,11 @@ const typeDefs = gql`
     input EmailInput {
         email: String!
     }
+    
+    input PasswordInput {
+        token: String!
+        newPass: String!
+    }
 
     type ClientesxUsuario {
         id: ID
@@ -105,6 +110,7 @@ const typeDefs = gql`
         nuevoUsuario(input: UsuarioInput): Usuario
         autenticarUsuario(input: AutenticarInput): Token
         resetPassword(input: EmailInput): String
+        updatePassword(input: PasswordInput): String
 
         # Clientes
         nuevoCliente(input: ClienteInput): Cliente

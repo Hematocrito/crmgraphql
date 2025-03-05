@@ -173,7 +173,28 @@ const resolvers = {
                 console.log(error);
                 throw new Error('Error al enviar el email');
             }
-        },  
+        }, 
+        updatePassword: async (_, { input }) => {
+            const { token, newPass } = input;
+
+            try {
+                const decoded = jwt.verify(token, process.env.SECRETA);        
+                const usuario = await Usuario.findOne({ email: decoded.email });
+        
+                if (!usuario) {
+                    throw new Error('Usuario no encontrado');
+                }
+
+                //Hashear el password
+                const salt = await bcryptjs.genSaltSync(10);
+                usuario.password = await bcryptjs.hashSync(newPass, salt);
+                await usuario.save();
+
+                return "Contraseña actualizada correctamente";
+            } catch (error) {
+                throw new Error('Token inválido o expirado');
+            }
+        },
         nuevoCliente: async (_, {input}, ctx) => {
             //Verificar si el cliente ya está registrado
             const {email} = input;
