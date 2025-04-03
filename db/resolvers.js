@@ -59,7 +59,7 @@ const resolvers = {
             }
 
             //Quien lo creo puede verlo o si es superusuario
-            if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'ADMIN'){
+            if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'admin'){
                 throw new Error('No tienes las credenciales');
             }
             return cliente;
