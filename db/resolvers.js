@@ -40,7 +40,7 @@ const resolvers = {
         obtenerClientesVendedor: async (_, {}, ctx) => {
             try {
                 // Si es superusuario, retorna todos los clientes
-                if (ctx.usuario.rol === 'ADMIN') {
+                if (ctx.usuario.rol === 'admin') {
                     const clientes = await Cliente.find({});
                     return clientes;
                 }
@@ -238,7 +238,7 @@ const resolvers = {
             }
 
             //Verificar si el vendedor es quien edita o si es superusuario
-            if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'ADMIN'){
+            if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'admin'){
                 throw new Error('No tienes las credenciales');
             }
 
