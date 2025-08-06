@@ -196,12 +196,13 @@ const resolvers = {
             }
         },
         nuevoCliente: async (_, {input}, ctx) => {
-            //Verificar si el cliente ya está registrado
+            /*Verificar si el cliente ya está registrado
             const {email} = input;
             const cliente = await Cliente.findOne({email});
             if(cliente){
                 throw new Error('Ese cliente ya está registrado');
-            }
+            } */
+           
             const nuevoCliente = new Cliente(input);
 
             //Asignar el vendedor
