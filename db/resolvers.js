@@ -72,7 +72,7 @@ const resolvers = {
 
             try {
                 // Obtener todos los usuarios excepto los admin
-                const usuarios = await Usuario.find({ rol: { $ne: 'admin' } });
+                const usuarios = await Usuario.find({});
                 
                 // Para cada usuario, obtener sus clientes
                 const usuariosConClientes = await Promise.all(
