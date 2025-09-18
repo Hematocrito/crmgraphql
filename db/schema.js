@@ -23,6 +23,7 @@ const typeDefs = gql`
         dni: String
         estado: String
         notas: String
+        archivos: [String]
         vendedor: ID
     }
 
@@ -58,6 +59,7 @@ const typeDefs = gql`
         dni: String
         estado: String!
         notas: String
+        archivos: [String]
     }
 
     input AutenticarInput {
@@ -116,6 +118,9 @@ const typeDefs = gql`
         nuevoCliente(input: ClienteInput): Cliente
         actualizarCliente(id: ID!, input: ClienteInput): Cliente
         eliminarCliente(id: ID!): String
+
+        # Utilidades / Pruebas
+        testBlob: String
     }
 `;
 

@@ -41,6 +41,10 @@ const ClientesSchema = mongoose.Schema({
         type: String,
         trim: true
     },
+    archivos: {
+        type: [String],
+        default: []
+    },
     creado: {
         type: Date,
         default: Date.now()

@@ -1,7 +1,7 @@
 const { ApolloServer, gql } = require('apollo-server');
 const typeDefs = require('./db/schema');
 const resolvers = require('./db/resolvers');
-require('dotenv').config({ path: 'variables.env' });
+require('dotenv').config();
 const conectarDB = require('./config/db');
 const jwt = require('jsonwebtoken');
 
