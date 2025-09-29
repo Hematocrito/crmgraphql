@@ -27,6 +27,9 @@ const mimeFromExt = (ext) => {
         case 'pdf': return 'application/pdf';
         case 'doc': return 'application/msword';
         case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        case 'jpg':
+        case 'jpeg': return 'image/jpeg';
+        case 'png': return 'image/png';
         default: return 'application/octet-stream';
     }
 };
@@ -36,6 +39,8 @@ const extFromMime = (mime) => {
         case 'application/pdf': return 'pdf';
         case 'application/msword': return 'doc';
         case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': return 'docx';
+        case 'image/jpeg': return 'jpg';
+        case 'image/png': return 'png';
         default: return 'bin';
     }
 };
@@ -50,21 +55,66 @@ const parseDataUrl = (dataUrl) => {
     return { buffer, mime, ext };
 };
 
+const generateShortFileHash = () => {
+    const value = Math.floor(Math.random() * (36 ** 3));
+    return value.toString(36).padStart(3, '0');
+};
+
+const sanitizeFilename = (rawName, ext) => {
+    const allowed = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
+    const segment = (rawName || '')
+        .split(/[\\\\/]/)
+        .pop()
+        .split('?')[0]
+        .split('#')[0]
+        .trim();
+
+    const fallbackExt = (ext || '').toLowerCase();
+    const dotIndex = segment.lastIndexOf('.');
+    let basePart = dotIndex > 0 ? segment.slice(0, dotIndex) : segment;
+    let extPart = dotIndex > 0 ? segment.slice(dotIndex + 1) : '';
+
+    basePart = basePart
+        .replace(/[\\*?:<>"'|]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^[-.]+/, '')
+        .replace(/[-.]+$/, '');
+
+    if (!basePart) basePart = 'archivo';
+
+    let pickedExt = (extPart || fallbackExt || '').toLowerCase();
+    if (!allowed.includes(pickedExt) && allowed.includes(fallbackExt)) {
+        pickedExt = fallbackExt;
+    }
+    if (!allowed.includes(pickedExt)) {
+        pickedExt = 'bin';
+    }
+
+    return `${basePart}.${pickedExt}`;
+};
+
 const uploadArchivosAVercelBlob = async (archivos) => {
     if (!Array.isArray(archivos) || archivos.length === 0) return [];
     const { put } = await import('@vercel/blob');
-    const permitidos = ['pdf', 'doc', 'docx'];
+    const permitidos = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
+    const preserved = [];
     const urls = [];
+    const usedFilenames = new Set();
+    const maxArchivos = 3;
 
-    for (const item of archivos.slice(0, 3)) {
-        if (typeof item !== 'string') continue;
+    for (const rawItem of archivos.slice(0, maxArchivos)) {
+        if (typeof rawItem !== 'string') continue;
+
+        const item = rawItem.trim();
+        if (!item) continue;
 
         let buffer = null;
         let mime = 'application/octet-stream';
         let ext = 'bin';
         let filename = null;
 
-        if (!buffer && item.trim().startsWith('{')) {
+        if (!buffer && item.startsWith('{')) {
             try {
                 const parsed = JSON.parse(item);
                 if (parsed && parsed.data) {
@@ -99,48 +149,47 @@ const uploadArchivosAVercelBlob = async (archivos) => {
         }
 
         if (!buffer && (item.startsWith('http://') || item.startsWith('https://'))) {
-            if (typeof fetch !== 'function') {
-                throw new Error('fetch no disponible en este entorno para descargar archivos remotos');
-            }
-            const resp = await fetch(item);
-            if (!resp.ok) throw new Error(`No se pudo descargar el archivo: ${resp.status}`);
-            const ab = await resp.arrayBuffer();
-            buffer = Buffer.from(ab);
-            mime = resp.headers.get('content-type') || mime;
-            if (!filename) {
-                const url = new URL(item);
-                const last = url.pathname.split('/').pop() || 'archivo';
-                filename = last;
-            }
-            if (!ext) {
-                if (filename && filename.includes('.')) ext = filename.split('.').pop();
-                else ext = extFromMime(mime);
-            }
+            preserved.push(item);
+            continue;
         }
 
         if (!buffer) continue;
 
-        if (!['pdf', 'doc', 'docx'].includes((ext || '').toLowerCase())) {
+        if (!permitidos.includes((ext || '').toLowerCase())) {
             const deducedExt = extFromMime(mime);
-            if (!['pdf', 'doc', 'docx'].includes((deducedExt || '').toLowerCase())) {
+            if (!permitidos.includes((deducedExt || '').toLowerCase())) {
                 continue;
             } else {
                 ext = deducedExt;
             }
         }
 
-        if (!filename) {
-            filename = `file_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-        } else if (!filename.includes('.')) {
-            filename = `${filename}.${ext}`;
+        const sanitizedName = sanitizeFilename(filename, ext);
+        const dotIndex = sanitizedName.lastIndexOf('.');
+        const basePart = dotIndex > 0 ? sanitizedName.slice(0, dotIndex) : sanitizedName;
+        const normalizedExt = (dotIndex > 0 ? sanitizedName.slice(dotIndex + 1) : (ext || 'bin')).toLowerCase();
+
+        let candidateName = `${basePart}.${normalizedExt}`;
+        let candidateKey = candidateName.toLowerCase();
+        while (usedFilenames.has(candidateKey)) {
+            candidateName = `${basePart}-${generateShortFileHash()}.${normalizedExt}`;
+            candidateKey = candidateName.toLowerCase();
         }
 
-        const key = `archivos/${filename}`;
-        const { url } = await put(key, buffer, { access: 'public', contentType: mimeFromExt(ext) });
+        usedFilenames.add(candidateKey);
+        filename = candidateName;
+
+        const folderSegment = `${Date.now().toString(36)}-${generateShortFileHash()}`;
+        const key = `archivos/${folderSegment}/${filename}`;
+        const { url } = await put(key, buffer, {
+            access: 'public',
+            contentType: mimeFromExt(ext),
+            addRandomSuffix: false
+        });
         urls.push(url);
     }
 
-    return urls;
+    return [...preserved, ...urls];
 };
 
 //Resolvers
@@ -179,7 +228,7 @@ const resolvers = {
             if(!cliente){
                 throw new Error('Cliente no encontrado');
             }
-
+            
             //Quien lo creo puede verlo o si es superusuario
             if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'admin'){
                 throw new Error('No tienes las credenciales');
@@ -325,12 +374,15 @@ const resolvers = {
                 throw new Error('Ese cliente ya está registrado');
             } */
            
-            // Validar y limitar archivos (máx 3, solo PDF/DOC/DOCX)
+            // Validar y limitar archivos (max 3, formatos PDF/DOC/DOCX/JPG/JPEG/PNG)
             if (input.archivos && Array.isArray(input.archivos)) {
                 const permitidos = [
                     '.pdf',
                     '.doc',
-                    '.docx'
+                    '.docx',
+                    '.jpg',
+                    '.jpeg',
+                    '.png'
                 ];
                 const normalizados = input.archivos
                     .filter((a) => typeof a === 'string')
@@ -339,13 +391,13 @@ const resolvers = {
                         try {
                             const parsed = JSON.parse(trimmed);
                             if (parsed && typeof parsed.name === 'string') {
-                                const lowerName = parsed.name.toLowerCase();
+                                const lowerName = parsed.name.toLowerCase().split('?' )[0];
                                 return permitidos.some((ext) => lowerName.endsWith(ext));
                             }
                         } catch (error) {
                             // Ignore non-JSON strings and fallback to suffix check below
                         }
-                        const lower = trimmed.toLowerCase();
+                        const lower = trimmed.toLowerCase().split('?')[0];
                         return permitidos.some((ext) => lower.endsWith(ext));
                     })
                     .slice(0, 3);
@@ -378,12 +430,15 @@ const resolvers = {
                 throw new Error('No tienes las credenciales');
             }
             console.log('Input:', input);
-            // Validar y limitar archivos (máx 3, solo PDF/DOC/DOCX)
+            // Validar y limitar archivos (max 3, formatos PDF/DOC/DOCX/JPG/JPEG/PNG)
             if (input.archivos && Array.isArray(input.archivos)) {
                 const permitidos = [
                     '.pdf',
                     '.doc',
-                    '.docx'
+                    '.docx',
+                    '.jpg',
+                    '.jpeg',
+                    '.png'
                 ];
                 const normalizados = input.archivos
                     .filter((a) => typeof a === 'string')
@@ -392,13 +447,13 @@ const resolvers = {
                         try {
                             const parsed = JSON.parse(trimmed);
                             if (parsed && typeof parsed.name === 'string') {
-                                const lowerName = parsed.name.toLowerCase();
+                                const lowerName = parsed.name.toLowerCase().split('?' )[0];
                                 return permitidos.some((ext) => lowerName.endsWith(ext));
                             }
                         } catch (error) {
                             // Ignore non-JSON strings and fallback to suffix check below
                         }
-                        const lower = trimmed.toLowerCase();
+                        const lower = trimmed.toLowerCase().split('?')[0];
                         return permitidos.some((ext) => lower.endsWith(ext));
                     })
                     .slice(0, 3);
