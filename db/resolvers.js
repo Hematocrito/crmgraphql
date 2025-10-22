@@ -212,11 +212,11 @@ const resolvers = {
             try {
                 // Si es superusuario, retorna todos los clientes
                 if (ctx.usuario.rol === 'admin') {
-                    const clientes = await Cliente.find({});
+                    const clientes = await Cliente.find({}).sort({ creado: -1 });
                     return clientes;
                 }
                 // Si no es superusuario, solo retorna sus clientes
-                const clientes = await Cliente.find({vendedor: ctx.usuario.id.toString()});
+                const clientes = await Cliente.find({vendedor: ctx.usuario.id.toString()}).sort({ creado: -1 });
                 return clientes;
             } catch (error) {
                 console.log(error);
@@ -243,12 +243,12 @@ const resolvers = {
 
             try {
                 // Obtener todos los usuarios excepto los admin
-                const usuarios = await Usuario.find({});
+                const usuarios = await Usuario.find({}).sort({ creado: -1 });
                 
                 // Para cada usuario, obtener sus clientes
                 const usuariosConClientes = await Promise.all(
                     usuarios.map(async (usuario) => {
-                        const clientes = await Cliente.find({ vendedor: usuario.id });
+                        const clientes = await Cliente.find({ vendedor: usuario.id }).sort({ creado: -1 });
                         return {
                             ...usuario._doc,
                             clientes
