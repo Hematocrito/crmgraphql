@@ -35,7 +35,7 @@ const ClientesSchema = mongoose.Schema({
     },
     estado: {
         type: String,
-        enum: ['activo', 'inactivo', 'cerrado', 'pendiente']
+        enum: ['activo', 'inactivo', 'cerrado', 'pendiente', 'en_transito', 'activo_adm', 'activo_jud']
     },
     notas: {
         type: String,

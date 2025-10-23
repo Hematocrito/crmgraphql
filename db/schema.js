@@ -90,6 +90,16 @@ const typeDefs = gql`
         admin
     }
 
+    enum Estado {
+        activo
+        inactivo
+        cerrado
+        pendiente
+        en_transito
+        activo_adm
+        activo_jud
+    }
+
     type Query {
         # Usuarios
         obtenerUsuario: Usuario

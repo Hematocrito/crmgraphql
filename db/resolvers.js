@@ -1,4 +1,4 @@
-const Usuario = require('../models/Usuario');
+﻿const Usuario = require('../models/Usuario');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Cliente = require('../models/Cliente');
@@ -241,6 +241,16 @@ const resolvers = {
                 throw new Error('No tienes las credenciales para ver esta información');
             }
 
+            const STATUS_LABELS = {
+                activo: 'Activo',
+                inactivo: 'Inactivo',
+                cerrado: 'Cerrado',
+                pendiente: 'Pendiente',
+                en_transito: 'En tránsito',
+                activo_adm: 'Activo Administrativo',
+                activo_jud: 'Activo Judicial'
+            };
+
             try {
                 // Obtener todos los usuarios excepto los admin
                 const usuarios = await Usuario.find({}).sort({ creado: -1 });
@@ -249,9 +259,38 @@ const resolvers = {
                 const usuariosConClientes = await Promise.all(
                     usuarios.map(async (usuario) => {
                         const clientes = await Cliente.find({ vendedor: usuario.id }).sort({ creado: -1 });
+                        const clientesConEstadoFormateado = clientes.map((cliente) => {
+                            const base =
+                                typeof cliente.toObject === 'function'
+                                    ? cliente.toObject({ getters: true, virtuals: true })
+                                    : cliente._doc
+                                    ? { ...cliente._doc }
+                                    : { ...cliente };
+
+                            const idFromDoc =
+                                cliente.id ||
+                                (cliente._id && typeof cliente._id.toString === 'function'
+                                    ? cliente._id.toString()
+                                    : null);
+
+                            if (idFromDoc) {
+                                base.id = idFromDoc;
+                            }
+
+                            if (!base._id && cliente._id) {
+                                base._id = cliente._id;
+                            }
+
+                            if (typeof base.estado === 'string') {
+                                const normalized = base.estado.trim().toLowerCase();
+                                base.estado = STATUS_LABELS[normalized] || base.estado;
+                            }
+
+                            return base;
+                        });
                         return {
                             ...usuario._doc,
-                            clientes
+                            clientes: clientesConEstadoFormateado
                         };
                     })
                 );
