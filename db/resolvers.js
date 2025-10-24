@@ -229,17 +229,18 @@ const resolvers = {
                 throw new Error('Cliente no encontrado');
             }
             
-            //Quien lo creo puede verlo o si es superusuario
+            /* Quien lo creo puede verlo o si es superusuario
             if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'admin'){
                 throw new Error('No tienes las credenciales');
-            }
+            } */
+           
             return cliente;
         },
         obtenerClientesxUsuario: async (_, {}, ctx) => {
-            // Verificar si es admin
+            /* Verificar si es admin
             if (ctx.usuario.rol !== 'admin') {
                 throw new Error('No tienes las credenciales para ver esta información');
-            }
+            } */
 
             const STATUS_LABELS = {
                 activo: 'Activo',
@@ -464,10 +465,10 @@ const resolvers = {
                 throw new Error('Ese cliente no existe');
             }
 
-            //Verificar si el vendedor es quien edita o si es superusuario
+            /* Verificar si el vendedor es quien edita o si es superusuario
             if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'admin'){
                 throw new Error('No tienes las credenciales');
-            }
+            } */
             console.log('Input:', input);
             // Validar y limitar archivos (max 3, formatos PDF/DOC/DOCX/JPG/JPEG/PNG)
             if (input.archivos && Array.isArray(input.archivos)) {
