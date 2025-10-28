@@ -56,7 +56,7 @@ const typeDefs = gql`
         email: String
         telefono: String
         avatar: String
-        dni: String
+        dni: String!
         estado: String!
         notas: String
         archivos: [String]

@@ -407,12 +407,12 @@ const resolvers = {
             }
         },
         nuevoCliente: async (_, {input}, ctx) => {
-            /*Verificar si el cliente ya está registrado
-            const {email} = input;
-            const cliente = await Cliente.findOne({email});
+            //Verificar si el cliente ya está registrado
+            const {dni} = input;
+            const cliente = await Cliente.findOne({dni});
             if(cliente){
                 throw new Error('Ese cliente ya está registrado');
-            } */
+            } 
            
             // Validar y limitar archivos (max 3, formatos PDF/DOC/DOCX/JPG/JPEG/PNG)
             if (input.archivos && Array.isArray(input.archivos)) {

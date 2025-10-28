@@ -29,9 +29,9 @@ const ClientesSchema = mongoose.Schema({
     },
     dni: {
         type: String,
+        required: true,
         trim: true,
-        unique: true,
-        sparse: true  // permite que el campo sea opcional pero único cuando existe
+        unique: true
     },
     estado: {
         type: String,
@@ -57,3 +57,4 @@ const ClientesSchema = mongoose.Schema({
 });
 
 module.exports = mongoose.model('Cliente', ClientesSchema);
+
