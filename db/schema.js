@@ -76,6 +76,16 @@ const typeDefs = gql`
         newPass: String!
     }
 
+    input AgendaEventInput {
+        title: String!
+        description: String
+        date: String!
+        time: String!
+        location: String
+        client: String
+        type: String
+    }
+
     type ClientesxUsuario {
         id: ID
         nombre: String
@@ -115,6 +125,9 @@ const typeDefs = gql`
         # Búsquedas avanzadas
         mejoresClientes: [TopCliente]
         mejoresVendedores: [TopVendedor]
+
+        # Agenda
+        obtenerEventosAgenda(fecha: String!): [AgendaEvent]
     }
 
     type Mutation {
@@ -131,6 +144,35 @@ const typeDefs = gql`
 
         # Utilidades / Pruebas
         testBlob: String
+
+        # Agenda
+        crearEventoAgenda(input: AgendaEventInput!): AgendaEventPayload
+    }
+
+    type AgendaEvent {
+        id: ID
+        title: String
+        description: String
+        date: String
+        time: String
+        location: String
+        client: String
+        type: String
+        usuario: ID
+        createdAt: String
+        updatedAt: String
+    }
+
+    type AgendaEventPayload {
+        title: String
+        description: String
+        date: String
+        time: String
+        location: String
+        client: String
+        type: String
+        submittedAt: String
+        usuario: ID
     }
 `;
 

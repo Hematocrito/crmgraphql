@@ -2,8 +2,12 @@
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Cliente = require('../models/Cliente');
+const AgendaEvent = require('../models/AgendaEvent');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
 
 // Configurar el transporter de nodemailer
 const transporter = nodemailer.createTransport({
@@ -20,6 +24,56 @@ const crearToken = (usuario, secreta, expiresIn) => {
     const { id, email, nombre, apellido, rol } = usuario;
     return jwt.sign({ id, email, rol }, secreta, { expiresIn });
 } 
+
+const postJson = (url, data) => {
+    if (!url) return Promise.resolve({ status: 0, body: '' });
+    const parsed = new URL(url);
+    const payload = JSON.stringify(data);
+    const transport = parsed.protocol === 'https:' ? https : http;
+    const options = {
+        method: 'POST',
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: `${parsed.pathname}${parsed.search || ''}`,
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload)
+        }
+    };
+
+    return new Promise((resolve, reject) => {
+        const req = transport.request(options, (res) => {
+            let body = '';
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => {
+                resolve({ status: res.statusCode || 0, body });
+            });
+        });
+        req.on('error', reject);
+        req.write(payload);
+        req.end();
+    });
+};
+
+const normalizeDateInput = (value) => {
+    if (!value) return value;
+    const raw = String(value).trim();
+    // dd/mm/yyyy -> yyyy-mm-dd
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+        const [dd, mm, yyyy] = raw.split('/');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+    // yyyy-mm-dd or yyyy-mm-ddThh:mm:ss
+    if (raw.includes('T')) return raw.split('T')[0];
+    return raw;
+};
+
+const normalizeTimeInput = (value) => {
+    if (!value) return value;
+    const raw = String(value).trim();
+    if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`;
+    return raw;
+};
 
 // Helpers para subir archivos a Vercel Blob
 const mimeFromExt = (ext) => {
@@ -301,6 +355,17 @@ const resolvers = {
                 console.log(error);
                 throw new Error('Error al obtener los usuarios y sus clientes');
             }
+        },
+        obtenerEventosAgenda: async (_, { fecha }, ctx) => {
+            const normalizedDate = normalizeDateInput(fecha);
+            const filter = { date: normalizedDate };
+            try {
+                const eventos = await AgendaEvent.find(filter).sort({ time: 1, createdAt: 1 });
+                return eventos;
+            } catch (error) {
+                console.log(error);
+                throw new Error('No se pudieron obtener los eventos');
+            }
         }
     },
     Mutation: {
@@ -542,6 +607,81 @@ const resolvers = {
             } catch (error) {
                 console.error('Error subiendo a Vercel Blob:', error);
                 throw new Error('No se pudo subir el archivo de prueba');
+            }
+        },
+
+        crearEventoAgenda: async (_, { input }, ctx) => {
+            const normalizedInput = {
+                ...input,
+                date: normalizeDateInput(input.date),
+                time: normalizeTimeInput(input.time)
+            };
+
+            try {
+                const nuevoEvento = new AgendaEvent({
+                    ...normalizedInput,
+                    usuario: ctx && ctx.usuario ? ctx.usuario.id : undefined
+                });
+                await nuevoEvento.save();
+
+                const webhookUrl =
+                    process.env.N8N_WEBHOOK_URL; /* ||
+                    'https://hemaia.cloud/webhook/2cc079d6-4720-4a37-b7bf-882833478acd'; */
+
+                const normalizeDate = (value) => {
+                    if (!value) return null;
+                    const raw = String(value);
+                    return raw.includes('T') ? raw.split('T')[0] : raw.slice(0, 10);
+                };
+
+                const normalizeTime = (value) => {
+                    if (!value) return null;
+                    const raw = String(value).trim();
+                    if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
+                    if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`;
+                    return raw;
+                };
+
+                const now = new Date();
+                const submittedAt = now.toISOString().slice(0, 19).replace('T', ' ');
+
+                const payload = {
+                    action: 'create',
+                    // id: resultado.id, Es Autoincremental, no se puede enviar porque MongoDB lo genera como ObjectId
+                    titulo: normalizedInput.title,
+                    descripcion: normalizedInput.description,
+                    fecha: normalizeDate(normalizedInput.date),
+                    hora: normalizeTime(normalizedInput.time),
+                    ubicacion: normalizedInput.location,
+                    cliente: normalizedInput.client,
+                    tipo: normalizedInput.type,
+                    submittedAt
+                };
+                console.log("Esto envía: ", payload);
+
+                try {
+                    const res = await postJson(webhookUrl, payload);
+                    if (res.status >= 400) {
+                        console.error('Webhook error:', res.status, res.body);
+                    }
+                } catch (err) {
+                    console.error('Webhook request failed:', err);
+                }
+
+                return {
+                    title: normalizedInput.title,
+                    description: normalizedInput.description,
+                    date: normalizedInput.date,
+                    time: normalizedInput.time,
+                    location: normalizedInput.location,
+                    client: normalizedInput.client,
+                    type: normalizedInput.type,
+                    submittedAt,
+                    usuario: ctx && ctx.usuario ? ctx.usuario.id : null
+                };
+            } catch (error) {
+                console.log(error);
+                throw new Error('No se pudo crear el evento');
             }
         }
     }
