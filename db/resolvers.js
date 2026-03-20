@@ -655,6 +655,7 @@ const resolvers = {
                     ubicacion: normalizedInput.location,
                     cliente: normalizedInput.client,
                     tipo: normalizedInput.type,
+                    usuarioId: ctx && ctx.usuario ? ctx.usuario.id : null,
                     submittedAt
                 };
                 console.log("Esto envía: ", payload);
