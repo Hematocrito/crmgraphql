@@ -147,6 +147,8 @@ const typeDefs = gql`
 
         # Agenda
         crearEventoAgenda(input: AgendaEventInput!): AgendaEventPayload
+        editarEventoAgenda(id: ID!, input: AgendaEventInput!): AgendaEventPayload
+        eliminarEventoAgenda(id: ID!): String
     }
 
     type AgendaEvent {

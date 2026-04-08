@@ -109,6 +109,74 @@ const parseDataUrl = (dataUrl) => {
     return { buffer, mime, ext };
 };
 
+const agendaWebhookUrl =
+    process.env.N8N_WEBHOOK_URL ||
+    'https://hemaia.cloud/webhook/2cc079d6-4720-4a37-b7bf-882833478acd';
+
+const agendaWebhookDedupWindowMs = 5000;
+const recentAgendaWebhookPayloads = new Map();
+
+const normalizeAgendaWebhookDate = (value) => {
+    if (!value) return null;
+    const raw = String(value);
+    return raw.includes('T') ? raw.split('T')[0] : raw.slice(0, 10);
+};
+
+const normalizeAgendaWebhookTime = (value) => {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
+    if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`;
+    return raw;
+};
+
+const buildAgendaWebhookDedupKey = (payload) => {
+    if (!payload || !payload.action || !payload.eventoId) return null;
+
+    return JSON.stringify({
+        action: payload.action,
+        eventoId: payload.eventoId,
+        titulo: payload.titulo || '',
+        descripcion: payload.descripcion || '',
+        fecha: payload.fecha || '',
+        hora: payload.hora || '',
+        ubicacion: payload.ubicacion || '',
+        cliente: payload.cliente || '',
+        tipo: payload.tipo || '',
+        usuarioId: payload.usuarioId || ''
+    });
+};
+
+const postAgendaWebhook = async (payload) => {
+    const now = Date.now();
+    const dedupKey = buildAgendaWebhookDedupKey(payload);
+
+    for (const [key, timestamp] of recentAgendaWebhookPayloads.entries()) {
+        if (now - timestamp > agendaWebhookDedupWindowMs) {
+            recentAgendaWebhookPayloads.delete(key);
+        }
+    }
+
+    if (dedupKey && recentAgendaWebhookPayloads.has(dedupKey)) {
+        console.log('Skipping duplicate agenda webhook payload:', dedupKey);
+        return { status: 202, body: 'duplicate_skipped' };
+    }
+
+    if (dedupKey) {
+        recentAgendaWebhookPayloads.set(dedupKey, now);
+    }
+
+    try {
+        //console.log('PAYLOAD QUE VA AL WEBHOOK:', payload);
+        return await postJson(agendaWebhookUrl, payload);
+    } catch (error) {
+        if (dedupKey) {
+            recentAgendaWebhookPayloads.delete(dedupKey);
+        }
+        throw error;
+    }
+};
+
 const generateShortFileHash = () => {
     const value = Math.floor(Math.random() * (36 ** 3));
     return value.toString(36).padStart(3, '0');
@@ -624,44 +692,34 @@ const resolvers = {
                 });
                 await nuevoEvento.save();
 
-                const webhookUrl =
-                    process.env.N8N_WEBHOOK_URL; /* ||
-                    'https://hemaia.cloud/webhook/2cc079d6-4720-4a37-b7bf-882833478acd'; */
-
-                const normalizeDate = (value) => {
-                    if (!value) return null;
-                    const raw = String(value);
-                    return raw.includes('T') ? raw.split('T')[0] : raw.slice(0, 10);
-                };
-
-                const normalizeTime = (value) => {
-                    if (!value) return null;
-                    const raw = String(value).trim();
-                    if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
-                    if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`;
-                    return raw;
-                };
-
                 const now = new Date();
                 const submittedAt = now.toISOString().slice(0, 19).replace('T', ' ');
+                const eventoId = String(nuevoEvento._id);
+                console.log('ID DEL EVENTO$$$$$$$$$$$$$$:', eventoId);
+
+                const usuarioId = ctx && ctx.usuario && ctx.usuario.id
+                    ? String(ctx.usuario.id)
+                    : null;
 
                 const payload = {
                     action: 'create',
-                    // id: resultado.id, Es Autoincremental, no se puede enviar porque MongoDB lo genera como ObjectId
+                    id: eventoId,
+                    mongoId: eventoId,
+                    eventoId,
                     titulo: normalizedInput.title,
                     descripcion: normalizedInput.description,
-                    fecha: normalizeDate(normalizedInput.date),
-                    hora: normalizeTime(normalizedInput.time),
+                    fecha: normalizeAgendaWebhookDate(normalizedInput.date),
+                    hora: normalizeAgendaWebhookTime(normalizedInput.time),
                     ubicacion: normalizedInput.location,
                     cliente: normalizedInput.client,
                     tipo: normalizedInput.type,
-                    usuarioId: ctx && ctx.usuario ? ctx.usuario.id : null,
+                    usuarioId,
                     submittedAt
                 };
-                console.log("Esto envía: ", payload);
+                console.log('|||||| ID DE MONGO:', payload.mongoId);
 
                 try {
-                    const res = await postJson(webhookUrl, payload);
+                    const res = await postAgendaWebhook(payload);
                     if (res.status >= 400) {
                         console.error('Webhook error:', res.status, res.body);
                     }
@@ -684,9 +742,123 @@ const resolvers = {
                 console.log(error);
                 throw new Error('No se pudo crear el evento');
             }
+        },
+
+        editarEventoAgenda: async (_, { id, input }, ctx) => {
+            const normalizedInput = {
+                ...input,
+                date: normalizeDateInput(input.date),
+                time: normalizeTimeInput(input.time)
+            };
+
+            try {
+                const eventoActualizado = await AgendaEvent.findByIdAndUpdate(
+                    id,
+                    { ...normalizedInput },
+                    { new: true, runValidators: true }
+                );
+
+                if (!eventoActualizado) {
+                    throw new Error('Evento no encontrado');
+                }
+
+                const submittedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+                const eventoId = String(eventoActualizado._id);
+                const usuarioId = ctx && ctx.usuario && ctx.usuario.id
+                    ? String(ctx.usuario.id)
+                    : eventoActualizado.usuario
+                        ? String(eventoActualizado.usuario)
+                        : null;
+
+                const payload = {
+                    action: 'update',
+                    id: eventoId,
+                    mongoId: eventoId,
+                    eventoId,
+                    titulo: normalizedInput.title,
+                    descripcion: normalizedInput.description,
+                    fecha: normalizeAgendaWebhookDate(normalizedInput.date),
+                    hora: normalizeAgendaWebhookTime(normalizedInput.time),
+                    ubicacion: normalizedInput.location,
+                    cliente: normalizedInput.client,
+                    tipo: normalizedInput.type,
+                    usuarioId,
+                    submittedAt
+                };
+                //console.log('|||||| payload:', payload);
+
+                try {
+                    const res = await postAgendaWebhook(payload);
+                    if (res.status >= 400) {
+                        console.error('Webhook error:', res.status, res.body);
+                    }
+                } catch (err) {
+                    console.error('Webhook request failed:', err);
+                }
+
+                return {
+                    title: eventoActualizado.title,
+                    description: eventoActualizado.description,
+                    date: eventoActualizado.date,
+                    time: eventoActualizado.time,
+                    location: eventoActualizado.location,
+                    client: eventoActualizado.client,
+                    type: eventoActualizado.type,
+                    submittedAt,
+                    usuario: eventoActualizado.usuario ? String(eventoActualizado.usuario) : null
+                };
+            } catch (error) {
+                console.log(error);
+                throw new Error(error.message || 'No se pudo editar el evento');
+            }
+        },
+
+        eliminarEventoAgenda: async (_, { id }, ctx) => {
+            try {
+                const evento = await AgendaEvent.findById(id);
+
+                if (!evento) {
+                    throw new Error('Evento no encontrado');
+                }
+
+                const eventoId = String(evento._id);
+                const usuarioId = ctx && ctx.usuario && ctx.usuario.id
+                    ? String(ctx.usuario.id)
+                    : evento.usuario
+                        ? String(evento.usuario)
+                        : null;
+                const submittedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+                await AgendaEvent.findByIdAndDelete(id);
+
+                const payload = {
+                    action: 'delete',
+                    id: eventoId,
+                    mongoId: eventoId,
+                    eventoId,
+                    usuarioId,
+                    submittedAt
+                };
+                console.log('|||||| payload:', payload);
+
+                try {
+                    const res = await postAgendaWebhook(payload);
+                    if (res.status >= 400) {
+                        console.error('Webhook error:', res.status, res.body);
+                    }
+                } catch (err) {
+                    console.error('Webhook request failed:', err);
+                }
+
+                return 'Evento eliminado';
+            } catch (error) {
+                console.log(error);
+                throw new Error(error.message || 'No se pudo eliminar el evento');
+            }
         }
     }
 }
 
 module.exports = resolvers;
+
 
