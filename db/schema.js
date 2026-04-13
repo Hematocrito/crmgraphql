@@ -95,6 +95,23 @@ const typeDefs = gql`
         clientes: [Cliente]
     }
 
+    type Actividad {
+        id: ID
+        usuario: ID
+        email: String
+        nombre: String
+        apellido: String
+        rol: String
+        accion: String
+        entidad: String
+        entidadId: String
+        detalle: String
+        ip: String
+        userAgent: String
+        exito: Boolean
+        creado: String
+    }
+
     enum Rol {
         usuario
         admin
@@ -128,6 +145,15 @@ const typeDefs = gql`
 
         # Agenda
         obtenerEventosAgenda(fecha: String!): [AgendaEvent]
+
+        # Auditoría
+        obtenerActividades(
+            fecha: String
+            entidad: String
+            accion: String
+            usuarioId: ID
+            limit: Int
+        ): [Actividad]
     }
 
     type Mutation {

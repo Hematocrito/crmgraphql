@@ -17,18 +17,32 @@ const server = new ApolloServer({
 
         //console.log(req.headers);
         const token = req.headers['authorization'] || '';
+        const ip = req.headers['x-forwarded-for']
+            ? req.headers['x-forwarded-for'].split(',')[0].trim()
+            : req.socket && req.socket.remoteAddress
+                ? req.socket.remoteAddress
+                : null;
+        const userAgent = req.headers['user-agent'] || null;
+
         if(token){
             try {
                 const usuario = jwt.verify(token.replace('Bearer ', ''), process.env.SECRETA);
                 console.log('Usuario autenticado', usuario);
                 return {
-                    usuario
+                    usuario,
+                    ip,
+                    userAgent
                 }
             } catch (error) {
                 console.log('Hubo un error');
                 console.log(error);
             }
         }
+
+        return {
+            ip,
+            userAgent
+        };
     }
 });
 

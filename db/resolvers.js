@@ -3,7 +3,9 @@ const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Cliente = require('../models/Cliente');
 const AgendaEvent = require('../models/AgendaEvent');
+const Actividad = require('../models/Actividad');
 const nodemailer = require('nodemailer');
+const registrarActividad = require('../utils/registrarActividad');
 require('dotenv').config();
 const https = require('https');
 const http = require('http');
@@ -73,6 +75,20 @@ const normalizeTimeInput = (value) => {
     const raw = String(value).trim();
     if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`;
     return raw;
+};
+
+const buildDateRangeFilter = (value) => {
+    const normalized = normalizeDateInput(value);
+    if (!normalized) return null;
+
+    const start = new Date(`${normalized}T00:00:00.000Z`);
+    const end = new Date(`${normalized}T23:59:59.999Z`);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return null;
+    }
+
+    return { $gte: start, $lte: end };
 };
 
 // Helpers para subir archivos a Vercel Blob
@@ -434,10 +450,62 @@ const resolvers = {
                 console.log(error);
                 throw new Error('No se pudieron obtener los eventos');
             }
+        },
+        obtenerActividades: async (_, { fecha, entidad, accion, usuarioId, limit }, ctx) => {
+            const filter = {};
+
+            if (fecha) {
+                const dateRange = buildDateRangeFilter(fecha);
+                if (dateRange) {
+                    filter.creado = dateRange;
+                }
+            }
+
+            if (entidad) {
+                filter.entidad = entidad;
+            }
+
+            if (accion) {
+                filter.accion = accion;
+            }
+
+            if (usuarioId) {
+                filter.usuario = usuarioId;
+            }
+
+            const safeLimit = Number.isInteger(limit) && limit > 0
+                ? Math.min(limit, 100)
+                : 50;
+
+            try {
+                const actividades = await Actividad.find(filter)
+                    .sort({ creado: -1 })
+                    .limit(safeLimit);
+
+                return actividades.map((actividad) => ({
+                    id: actividad._id.toString(),
+                    usuario: actividad.usuario ? String(actividad.usuario) : null,
+                    email: actividad.email || null,
+                    nombre: actividad.nombre || null,
+                    apellido: actividad.apellido || null,
+                    rol: actividad.rol || null,
+                    accion: actividad.accion,
+                    entidad: actividad.entidad,
+                    entidadId: actividad.entidadId || null,
+                    detalle: JSON.stringify(actividad.detalle || {}),
+                    ip: actividad.ip || null,
+                    userAgent: actividad.userAgent || null,
+                    exito: actividad.exito,
+                    creado: actividad.creado ? actividad.creado.toISOString() : null
+                }));
+            } catch (error) {
+                console.log(error);
+                throw new Error('No se pudieron obtener las actividades');
+            }
         }
     },
     Mutation: {
-        nuevoUsuario: async (_, { input }) => {
+        nuevoUsuario: async (_, { input }, ctx) => {
             const { email, password } = input;
             
             //Revisar si el usuario ya está registrado
@@ -453,39 +521,93 @@ const resolvers = {
             try {
                 //Guardarlo en la base de datos
                 const usuario = new Usuario(input);
-                usuario.save();
+                await usuario.save();
+                await registrarActividad({
+                    ctx,
+                    accion: 'crear_usuario',
+                    entidad: 'usuario',
+                    entidadId: usuario._id.toString(),
+                    detalle: {
+                        email: usuario.email,
+                        rol: usuario.rol
+                    }
+                });
                 return usuario;
                 
             } catch (error) {
                 console.log(error);
             }
         },
-        autenticarUsuario: async (_, { input }) => {
+        autenticarUsuario: async (_, { input }, ctx) => {
             const { email, password } = input;
 
             //Si el usuario existe
             const existeUsuario = await Usuario.findOne({email});
             if(!existeUsuario){
+                await registrarActividad({
+                    ctx,
+                    accion: 'login',
+                    entidad: 'auth',
+                    detalle: { email, motivo: 'usuario_no_existe' },
+                    exito: false
+                });
                 throw new Error('El usuario no existe');
             }
 
             //Revisar si el password es correcto
             const passwordCorrecto = await bcryptjs.compareSync(password, existeUsuario.password);
             if(!passwordCorrecto){
+                await registrarActividad({
+                    ctx: {
+                        ...ctx,
+                        usuario: {
+                            id: existeUsuario.id,
+                            email: existeUsuario.email,
+                            rol: existeUsuario.rol
+                        }
+                    },
+                    accion: 'login',
+                    entidad: 'auth',
+                    entidadId: existeUsuario.id,
+                    detalle: { email, motivo: 'password_incorrecto' },
+                    exito: false
+                });
                 throw new Error('El password es incorrecto');
             }
+
+            await registrarActividad({
+                ctx: {
+                    ...ctx,
+                    usuario: {
+                        id: existeUsuario.id,
+                        email: existeUsuario.email,
+                        rol: existeUsuario.rol
+                    }
+                },
+                accion: 'login',
+                entidad: 'auth',
+                entidadId: existeUsuario.id,
+                detalle: { email }
+            });
 
             //Generar el token
             return{
                 token: crearToken(existeUsuario, process.env.SECRETA, '24h')
             }
         },
-        resetPassword: async (_, {input}) => {
+        resetPassword: async (_, {input}, ctx) => {
             const {email} = input;
             
             // Verificar si el usuario existe
             const usuario = await Usuario.findOne({email});
             if(!usuario){
+                await registrarActividad({
+                    ctx,
+                    accion: 'solicitar_reset_password',
+                    entidad: 'auth',
+                    detalle: { email, motivo: 'usuario_no_existe' },
+                    exito: false
+                });
                 throw new Error('El usuario no existe');
             }
 
@@ -511,6 +633,21 @@ const resolvers = {
                     `
                 });
 
+                await registrarActividad({
+                    ctx: {
+                        ...ctx,
+                        usuario: {
+                            id: usuario.id,
+                            email: usuario.email,
+                            rol: usuario.rol
+                        }
+                    },
+                    accion: 'solicitar_reset_password',
+                    entidad: 'auth',
+                    entidadId: usuario.id,
+                    detalle: { email }
+                });
+
                 return "Se ha enviado un email con las instrucciones";
                 
             } catch (error) {
@@ -518,7 +655,7 @@ const resolvers = {
                 throw new Error('Error al enviar el email');
             }
         }, 
-        updatePassword: async (_, { input }) => {
+        updatePassword: async (_, { input }, ctx) => {
             const { token, newPass } = input;
 
             try {
@@ -533,6 +670,21 @@ const resolvers = {
                 const salt = await bcryptjs.genSaltSync(10);
                 usuario.password = await bcryptjs.hashSync(newPass, salt);
                 await usuario.save();
+
+                await registrarActividad({
+                    ctx: {
+                        ...ctx,
+                        usuario: {
+                            id: usuario.id,
+                            email: usuario.email,
+                            rol: usuario.rol
+                        }
+                    },
+                    accion: 'actualizar_password',
+                    entidad: 'auth',
+                    entidadId: usuario.id,
+                    detalle: { email: usuario.email }
+                });
 
                 return "Contraseña actualizada correctamente";
             } catch (error) {
@@ -585,6 +737,18 @@ const resolvers = {
             //Guardar en la base de datos
             try {
                 const resultado = await nuevoCliente.save();
+                await registrarActividad({
+                    ctx,
+                    accion: 'crear',
+                    entidad: 'cliente',
+                    entidadId: resultado._id.toString(),
+                    detalle: {
+                        nombre: resultado.nombre,
+                        apellido: resultado.apellido,
+                        dni: resultado.dni,
+                        estado: resultado.estado
+                    }
+                });
                 return resultado;
             } catch (error) {
                 console.log(error);
@@ -647,6 +811,19 @@ const resolvers = {
 
             //Guardar el cliente
             cliente = await Cliente.findOneAndUpdate({_id: id}, input, {new: true});
+            await registrarActividad({
+                ctx,
+                accion: 'editar',
+                entidad: 'cliente',
+                entidadId: id,
+                detalle: {
+                    camposEditados: Object.keys(input),
+                    nombre: cliente.nombre,
+                    apellido: cliente.apellido,
+                    dni: cliente.dni,
+                    estado: cliente.estado
+                }
+            });
             return cliente;
         },
         eliminarCliente: async (_, {id}, ctx) => {
@@ -663,6 +840,18 @@ const resolvers = {
 
             //Eliminar cliente
             await Cliente.findOneAndDelete({_id: cliente._id});
+            await registrarActividad({
+                ctx,
+                accion: 'eliminar',
+                entidad: 'cliente',
+                entidadId: cliente._id.toString(),
+                detalle: {
+                    nombre: cliente.nombre,
+                    apellido: cliente.apellido,
+                    dni: cliente.dni,
+                    estado: cliente.estado
+                }
+            });
             return "Cliente eliminado";
         },
 
@@ -726,6 +915,20 @@ const resolvers = {
                 } catch (err) {
                     console.error('Webhook request failed:', err);
                 }
+
+                await registrarActividad({
+                    ctx,
+                    accion: 'crear',
+                    entidad: 'agenda',
+                    entidadId: eventoId,
+                    detalle: {
+                        titulo: normalizedInput.title,
+                        fecha: normalizeAgendaWebhookDate(normalizedInput.date),
+                        hora: normalizeAgendaWebhookTime(normalizedInput.time),
+                        cliente: normalizedInput.client,
+                        tipo: normalizedInput.type
+                    }
+                });
 
                 return {
                     title: normalizedInput.title,
@@ -796,6 +999,20 @@ const resolvers = {
                     console.error('Webhook request failed:', err);
                 }
 
+                await registrarActividad({
+                    ctx,
+                    accion: 'editar',
+                    entidad: 'agenda',
+                    entidadId: eventoId,
+                    detalle: {
+                        titulo: normalizedInput.title,
+                        fecha: normalizeAgendaWebhookDate(normalizedInput.date),
+                        hora: normalizeAgendaWebhookTime(normalizedInput.time),
+                        cliente: normalizedInput.client,
+                        tipo: normalizedInput.type
+                    }
+                });
+
                 return {
                     title: eventoActualizado.title,
                     description: eventoActualizado.description,
@@ -849,6 +1066,20 @@ const resolvers = {
                 } catch (err) {
                     console.error('Webhook request failed:', err);
                 }
+
+                await registrarActividad({
+                    ctx,
+                    accion: 'eliminar',
+                    entidad: 'agenda',
+                    entidadId: eventoId,
+                    detalle: {
+                        titulo: evento.title,
+                        fecha: normalizeAgendaWebhookDate(evento.date),
+                        hora: normalizeAgendaWebhookTime(evento.time),
+                        cliente: evento.client,
+                        tipo: evento.type
+                    }
+                });
 
                 return 'Evento eliminado';
             } catch (error) {
