@@ -338,9 +338,18 @@ const resolvers = {
             const usuario = await Usuario.findById(id);
             return usuario;
         },
-        obtenerClientes: async () => {
+        obtenerClientes: async (_, {}, ctx) => {
             try {
                 const clientes = await Cliente.find({});
+                await registrarActividad({
+                    ctx,
+                    accion: 'listar',
+                    entidad: 'cliente',
+                    detalle: {
+                        total: clientes.length,
+                        alcance: 'todos'
+                    }
+                });
                 return clientes;
             } catch (error) {
                 console.log(error);
@@ -351,10 +360,29 @@ const resolvers = {
                 // Si es superusuario, retorna todos los clientes
                 if (ctx.usuario.rol === 'admin') {
                     const clientes = await Cliente.find({}).sort({ creado: -1 });
+                    await registrarActividad({
+                        ctx,
+                        accion: 'listar',
+                        entidad: 'cliente',
+                        detalle: {
+                            total: clientes.length,
+                            alcance: 'todos'
+                        }
+                    });
                     return clientes;
                 }
                 // Si no es superusuario, solo retorna sus clientes
                 const clientes = await Cliente.find({vendedor: ctx.usuario.id.toString()}).sort({ creado: -1 });
+                await registrarActividad({
+                    ctx,
+                    accion: 'listar',
+                    entidad: 'cliente',
+                    detalle: {
+                        total: clientes.length,
+                        alcance: 'vendedor',
+                        vendedor: ctx.usuario.id.toString()
+                    }
+                });
                 return clientes;
             } catch (error) {
                 console.log(error);
@@ -364,6 +392,16 @@ const resolvers = {
             //Revisar si el cliente existe o no
             const cliente = await Cliente.findById(id);
             if(!cliente){
+                await registrarActividad({
+                    ctx,
+                    accion: 'ver',
+                    entidad: 'cliente',
+                    entidadId: id,
+                    detalle: {
+                        motivo: 'cliente_no_encontrado'
+                    },
+                    exito: false
+                });
                 throw new Error('Cliente no encontrado');
             }
             
@@ -371,7 +409,19 @@ const resolvers = {
             if(cliente.vendedor.toString() !== ctx.usuario.id && ctx.usuario.rol !== 'admin'){
                 throw new Error('No tienes las credenciales');
             } */
-           
+            await registrarActividad({
+                ctx,
+                accion: 'ver',
+                entidad: 'cliente',
+                entidadId: cliente._id.toString(),
+                detalle: {
+                    nombre: cliente.nombre,
+                    apellido: cliente.apellido,
+                    dni: cliente.dni,
+                    estado: cliente.estado
+                }
+            });
+
             return cliente;
         },
         obtenerClientesxUsuario: async (_, {}, ctx) => {
@@ -433,6 +483,18 @@ const resolvers = {
                         };
                     })
                 );
+
+                await registrarActividad({
+                    ctx,
+                    accion: 'listar_por_usuario',
+                    entidad: 'cliente',
+                    detalle: {
+                        totalUsuarios: usuariosConClientes.length,
+                        totalClientes: usuariosConClientes.reduce((total, usuario) => (
+                            total + (Array.isArray(usuario.clientes) ? usuario.clientes.length : 0)
+                        ), 0)
+                    }
+                });
 
                 return usuariosConClientes;
             } catch (error) {
