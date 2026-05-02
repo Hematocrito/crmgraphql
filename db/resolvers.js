@@ -579,6 +579,7 @@ const resolvers = {
             //Hashear el password
             const salt = await bcryptjs.genSaltSync(10);
             input.password = await bcryptjs.hashSync(password, salt);
+            input.autorizado = false;
             
             try {
                 //Guardarlo en la base de datos
@@ -591,7 +592,8 @@ const resolvers = {
                     entidadId: usuario._id.toString(),
                     detalle: {
                         email: usuario.email,
-                        rol: usuario.rol
+                        rol: usuario.rol,
+                        autorizado: usuario.autorizado
                     }
                 });
                 return usuario;
@@ -637,6 +639,25 @@ const resolvers = {
                 throw new Error('El password es incorrecto');
             }
 
+            if(existeUsuario.autorizado === false){
+                await registrarActividad({
+                    ctx: {
+                        ...ctx,
+                        usuario: {
+                            id: existeUsuario.id,
+                            email: existeUsuario.email,
+                            rol: existeUsuario.rol
+                        }
+                    },
+                    accion: 'login',
+                    entidad: 'auth',
+                    entidadId: existeUsuario.id,
+                    detalle: { email, motivo: 'usuario_pendiente_autorizacion' },
+                    exito: false
+                });
+                throw new Error('Tu usuario esta pendiente de autorizacion');
+            }
+
             await registrarActividad({
                 ctx: {
                     ...ctx,
@@ -656,6 +677,33 @@ const resolvers = {
             return{
                 token: crearToken(existeUsuario, process.env.SECRETA, '24h')
             }
+        },
+        autorizarUsuario: async (_, { id }, ctx) => {
+            if (!ctx.usuario || ctx.usuario.rol !== 'admin') {
+                throw new Error('No tienes las credenciales');
+            }
+
+            const usuario = await Usuario.findById(id);
+            if (!usuario) {
+                throw new Error('El usuario no existe');
+            }
+
+            usuario.autorizado = true;
+            await usuario.save();
+
+            await registrarActividad({
+                ctx,
+                accion: 'autorizar_usuario',
+                entidad: 'usuario',
+                entidadId: usuario._id.toString(),
+                detalle: {
+                    email: usuario.email,
+                    rol: usuario.rol,
+                    autorizado: usuario.autorizado
+                }
+            });
+
+            return usuario;
         },
         resetPassword: async (_, {input}, ctx) => {
             const {email} = input;

@@ -10,6 +10,7 @@ const typeDefs = gql`
         email: String
         creado: String
         rol: String
+        autorizado: Boolean
     }
 
     type Cliente {
@@ -92,6 +93,7 @@ const typeDefs = gql`
         apellido: String
         email: String
         rol: String
+        autorizado: Boolean
         clientes: [Cliente]
     }
 
@@ -160,6 +162,7 @@ const typeDefs = gql`
         # Usuarios
         nuevoUsuario(input: UsuarioInput): Usuario
         autenticarUsuario(input: AutenticarInput): Token
+        autorizarUsuario(id: ID!): Usuario
         resetPassword(input: EmailInput): String
         updatePassword(input: PasswordInput): String
 
